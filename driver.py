@@ -5,9 +5,9 @@ RxPin = 10
 
 class Visual:
     
-    bassLED = 3
-    midLED  = 5
-    trebLED = 7
+    bassLED = 3 # bass
+    midLED  = 5 # alto, tenor
+    trebLED = 7 # seprano
     frequency = 120
 
     def __init__(self):
