@@ -1,5 +1,7 @@
 import RPi.GPIO as GPIO
-import time, socket
+import time, socket, math
+from datetime import datetime
+from numpy import fft
 
 class Visual:
     
@@ -45,30 +47,38 @@ class Visual:
         self.trebDriver1.ChangeDutyCycle(treb)
         self.trebDriver2.ChangeDutyCycle(treb)
 
+def getBMT(intensities):
+    mags   = [abs(i) for i in fft.rfft(intensities)]
+    bmtRaw = (math.log((sum(mags[1:3])/10485.76)**2.2+1)*10,
+              math.log((sum(mags[3:6])/10485.76)**2.2+1)*10,
+              math.log((sum(mags[6:9])/10485.76)**2.2+1)*10)
+    return (bmtRaw[0], bmtRaw[1], bmtRaw[2])
+    
+
 def start():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(('', 2345))
+    sock.listen(2)
 
+    client, addr = sock.accept()
+    
     visuals = Visual()
 
-    bmts = ((0,0,0),(100,100,100),(66,0,66),(30,30,30),(66,66,30),(30,30,30),(0,100,66))
-
-    index = 0
-
-    # bmt = bmts[0] # something that separates the treble, mid, and bass using fft
-
     while True:
-        bmt = bmts[index]
-        index = (index + 1) % len(bmts)
-        visuals.setBMT(bmt[0], bmt[1], bmt[2])
-        time.sleep(0.15)
-        bmt = bmts[0]
-        visuals.setBMT(bmt[0], bmt[1], bmt[2])
-        #time.sleep(0.02)
-    # some running code
+        intensities = []
+        for i in range(16):
+            ch = client.recv(2)
+            n = ord(ch[0]) << 8
+            n |= ord(ch[1])
+            intensities.append(n)
+        #intensities = [54442 for i in range(8)]+[0 for i in range(8)]
+        bmt = getBMT(intensities)
+        print bmt
+        visuals.setBMT(bmt[0],bmt[1],bmt[2])
     
     GPIO.cleanup()
-    sock.close()
+    client.close()
 
 if __name__ == "__main__":
     start()
