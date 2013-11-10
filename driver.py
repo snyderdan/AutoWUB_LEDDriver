@@ -1,7 +1,6 @@
+#!/usr/bin/env 
 import RPi.GPIO as GPIO
-import time, socket, math
-from datetime import datetime
-from numpy import fft
+import socket
 
 class Visual:
     
@@ -39,22 +38,33 @@ class Visual:
         self.trebDriver1.start(0)
         self.trebDriver2.start(0)
 
+        self.bassVal = 0
+        self.midVal  = 0
+        self.trebVal = 0
+
     def setBMT(self, bass, mid, treb):
-        self.bassDriver1.ChangeDutyCycle(bass)
-        self.bassDriver2.ChangeDutyCycle(bass)
-        self.midDriver1.ChangeDutyCycle(mid)
-        self.midDriver2.ChangeDutyCycle(mid)
-        self.trebDriver1.ChangeDutyCycle(treb)
-        self.trebDriver2.ChangeDutyCycle(treb)
-
-def getBMT(intensities):
-    mags   = [abs(i) for i in fft.rfft(intensities)]
-    bmtRaw = (math.log((sum(mags[1:3])/10485.76)**2.2+1)*10,
-              math.log((sum(mags[3:6])/10485.76)**2.2+1)*10,
-              math.log((sum(mags[6:9])/10485.76)**2.2+1)*10)
-    return (bmtRaw[0], bmtRaw[1], bmtRaw[2])
+        if bass < 90:
+            if self.bassVal > .5:
+                self.bassVal -= 0.5
+        else:
+            self.bassVal = bass/(bass+15)*100.0
+        if mid < 88:
+            if self.midVal > .5:
+                self.midVal -= 0.5
+        else:
+            self.midVal = mid/(mid+15)*100.0
+        if treb < 88:
+            if self.trebVal > .5:
+                self.trebVal -= 0.5
+        else:
+            self.trebVal = treb/(treb+15)*100.0
+        self.bassDriver1.ChangeDutyCycle(self.bassVal)
+        self.bassDriver2.ChangeDutyCycle(self.bassVal)
+        self.midDriver1.ChangeDutyCycle(self.midVal)
+        self.midDriver2.ChangeDutyCycle(self.midVal)
+        self.trebDriver1.ChangeDutyCycle(self.trebVal)
+        self.trebDriver2.ChangeDutyCycle(self.trebVal)
     
-
 def start():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -65,17 +75,18 @@ def start():
     
     visuals = Visual()
 
+    def recv():
+        ch = client.recv(2)
+        n = ord(ch[0]) << 8
+        n |= ord(ch[1])
+        return n
+
     while True:
-        intensities = []
-        for i in range(16):
-            ch = client.recv(2)
-            n = ord(ch[0]) << 8
-            n |= ord(ch[1])
-            intensities.append(n)
-        #intensities = [54442 for i in range(8)]+[0 for i in range(8)]
-        bmt = getBMT(intensities)
-        print bmt
-        visuals.setBMT(bmt[0],bmt[1],bmt[2])
+        intensities = (recv(), recv(), recv())
+
+        bmt = (sum(intensities[:2])/1310.0, sum(intensities[1:])/1310.0, sum(intensities)/1966.0)
+        #print bmt
+        visuals.setBMT(bmt[0], bmt[1], bmt[2])
     
     GPIO.cleanup()
     client.close()
